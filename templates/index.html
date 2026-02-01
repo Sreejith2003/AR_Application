@@ -24,7 +24,11 @@
 
 <div id="map"></div>
 
-<a-scene embedded vr-mode-ui="enabled: false">
+<a-scene
+  embedded
+  arjs="gpsMinDistance: 10; gpsTimeInterval: 5000;"
+  vr-mode-ui="enabled: false">
+
   <a-camera></a-camera>
   <a-light type="ambient" intensity="1"></a-light>
 </a-scene>

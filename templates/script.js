@@ -1,14 +1,23 @@
+// -----------------------------
+// GLOBAL REFERENCES
+// -----------------------------
 const scene = document.querySelector("a-scene");
 const placeBtn = document.getElementById("placeBtn");
 
-// DEFAULT LOCATION (fallback if GPS fails)
-let userLat = 12.9716;
-let userLon = 77.5946;
-
 let map;
+let userLat = null;
+let userLon = null;
+let objectsLoaded = false;
 
 // -----------------------------
-// INIT MAP (ALWAYS)
+// DEFAULT FALLBACK LOCATION
+// (used only if GPS fails)
+// -----------------------------
+const FALLBACK_LAT = 12.9716;
+const FALLBACK_LON = 77.5946;
+
+// -----------------------------
+// INITIALIZE MAP (ALWAYS)
 // -----------------------------
 function initMap(lat, lon) {
   map = L.map("map").setView([lat, lon], 18);
@@ -17,78 +26,100 @@ function initMap(lat, lon) {
     attribution: "© OpenStreetMap"
   }).addTo(map);
 
+  // User marker
   L.marker([lat, lon])
     .addTo(map)
-    .bindPopup("Your Location")
+    .bindPopup("You are here")
     .openPopup();
 
-  // Click anywhere to place object
+  // Allow placing object by clicking map
   map.on("click", (e) => {
     placeObject(e.latlng.lat, e.latlng.lng);
   });
 }
 
 // -----------------------------
-// TRY GPS (NON-BLOCKING)
+// GET REAL GPS (NON-BLOCKING)
 // -----------------------------
 navigator.geolocation.getCurrentPosition(
   (pos) => {
     userLat = pos.coords.latitude;
     userLon = pos.coords.longitude;
+
     console.log("GPS OK:", userLat, userLon);
     initMap(userLat, userLon);
     loadObjects();
   },
   (err) => {
-    console.warn("GPS failed, using fallback location");
+    console.warn("GPS failed, using fallback");
+    userLat = FALLBACK_LAT;
+    userLon = FALLBACK_LON;
+
     initMap(userLat, userLon);
     loadObjects();
   },
-  { enableHighAccuracy: true, timeout: 8000 }
+  {
+    enableHighAccuracy: true,
+    timeout: 10000,
+    maximumAge: 0
+  }
 );
 
 // -----------------------------
-// BUTTON FALLBACK
+// PLACE OBJECT (BUTTON FALLBACK)
 // -----------------------------
 placeBtn.onclick = () => {
-  placeObject(userLat, userLon);
+  if (userLat && userLon) {
+    placeObject(userLat, userLon);
+  } else {
+    alert("Waiting for GPS...");
+  }
 };
 
 // -----------------------------
-// PLACE OBJECT
+// PLACE OBJECT (BACKEND + UI)
 // -----------------------------
 function placeObject(lat, lon) {
   fetch("/place", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ latitude: lat, longitude: lon })
+    body: JSON.stringify({
+      latitude: lat,
+      longitude: lon
+    })
   }).then(() => {
     addARObject(lat, lon);
     addMapMarker(lat, lon);
-    alert("Object placed");
   });
 }
 
 // -----------------------------
-// ADD AR OBJECT (NEAR GROUND)
+// ADD AR OBJECT (FIXED & SMALL)
 // -----------------------------
 function addARObject(lat, lon) {
   const box = document.createElement("a-box");
 
+  // GPS anchor
   box.setAttribute(
     "gps-entity-place",
     `latitude: ${lat}; longitude: ${lon}`
   );
 
-  box.setAttribute("position", "0 -1.5 0");
-  box.setAttribute("scale", "3 3 3");
+  // SMALL SIZE FOR MOBILE
+  box.setAttribute("scale", "0.4 0.4 0.4");
+
+  // CLOSE TO GROUND
+  box.setAttribute("position", "0 -0.7 0");
+
   box.setAttribute("color", "red");
 
   scene.appendChild(box);
+
+  console.log("AR object placed at:", lat, lon);
 }
 
 // -----------------------------
-// MAP MARKER
+// ADD MAP MARKER
 // -----------------------------
 function addMapMarker(lat, lon) {
   L.marker([lat, lon])
@@ -97,9 +128,12 @@ function addMapMarker(lat, lon) {
 }
 
 // -----------------------------
-// LOAD SHARED OBJECTS
+// LOAD SHARED OBJECTS (ONCE)
 // -----------------------------
 function loadObjects() {
+  if (objectsLoaded) return;
+  objectsLoaded = true;
+
   fetch("/objects")
     .then(res => res.json())
     .then(objects => {
