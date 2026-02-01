@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <title>Shared Location AR</title>
 
-  <!-- A-Frame + AR.js -->
+  <!-- A-Frame & AR.js -->
   <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
   <script src="https://ar-js-org.github.io/AR.js/aframe/build/aframe-ar.js"></script>
 
@@ -20,15 +20,15 @@
 
 <body>
 
-  <button id="placeBtn">Place Object Here</button>
+<button id="placeBtn">Place Object</button>
 
-  <!-- Map -->
-  <div id="map"></div>
+<div id="map"></div>
 
-  <!-- AR Scene -->
-  <a-scene
-    embedded
-    arjs="sourceType: webcam; gpsMinDistance: 5;"
-    vr-mode-ui="enabled: false">
+<a-scene embedded vr-mode-ui="enabled: false">
+  <a-camera></a-camera>
+  <a-light type="ambient" intensity="1"></a-light>
+</a-scene>
 
-    <a-camera gps-camera rotation-reader></a-camera>
+<script src="/templates/script.js"></script>
+</body>
+</html>

@@ -1,31 +1,14 @@
 const scene = document.querySelector("a-scene");
+const placeBtn = document.getElementById("placeBtn");
+
+// DEFAULT LOCATION (fallback if GPS fails)
+let userLat = 12.9716;
+let userLon = 77.5946;
 
 let map;
-let userLat, userLon;
 
 // -----------------------------
-// GET REAL GPS LOCATION
-// -----------------------------
-navigator.geolocation.getCurrentPosition(
-  (pos) => {
-    userLat = pos.coords.latitude;
-    userLon = pos.coords.longitude;
-
-    initMap(userLat, userLon);
-    loadObjects();
-  },
-  (err) => {
-    alert("GPS access denied. Enable location and refresh.");
-    console.error(err);
-  },
-  {
-    enableHighAccuracy: true,
-    timeout: 10000
-  }
-);
-
-// -----------------------------
-// INIT MAP
+// INIT MAP (ALWAYS)
 // -----------------------------
 function initMap(lat, lon) {
   map = L.map("map").setView([lat, lon], 18);
@@ -34,10 +17,9 @@ function initMap(lat, lon) {
     attribution: "© OpenStreetMap"
   }).addTo(map);
 
-  // User marker
   L.marker([lat, lon])
     .addTo(map)
-    .bindPopup("You are here")
+    .bindPopup("Your Location")
     .openPopup();
 
   // Click anywhere to place object
@@ -45,6 +27,32 @@ function initMap(lat, lon) {
     placeObject(e.latlng.lat, e.latlng.lng);
   });
 }
+
+// -----------------------------
+// TRY GPS (NON-BLOCKING)
+// -----------------------------
+navigator.geolocation.getCurrentPosition(
+  (pos) => {
+    userLat = pos.coords.latitude;
+    userLon = pos.coords.longitude;
+    console.log("GPS OK:", userLat, userLon);
+    initMap(userLat, userLon);
+    loadObjects();
+  },
+  (err) => {
+    console.warn("GPS failed, using fallback location");
+    initMap(userLat, userLon);
+    loadObjects();
+  },
+  { enableHighAccuracy: true, timeout: 8000 }
+);
+
+// -----------------------------
+// BUTTON FALLBACK
+// -----------------------------
+placeBtn.onclick = () => {
+  placeObject(userLat, userLon);
+};
 
 // -----------------------------
 // PLACE OBJECT
@@ -57,7 +65,7 @@ function placeObject(lat, lon) {
   }).then(() => {
     addARObject(lat, lon);
     addMapMarker(lat, lon);
-    alert("Object placed at selected location");
+    alert("Object placed");
   });
 }
 
@@ -72,18 +80,15 @@ function addARObject(lat, lon) {
     `latitude: ${lat}; longitude: ${lon}`
   );
 
-  // Push object near ground
   box.setAttribute("position", "0 -1.5 0");
   box.setAttribute("scale", "3 3 3");
   box.setAttribute("color", "red");
 
   scene.appendChild(box);
-
-  console.log("AR object added at:", lat, lon);
 }
 
 // -----------------------------
-// ADD MAP MARKER
+// MAP MARKER
 // -----------------------------
 function addMapMarker(lat, lon) {
   L.marker([lat, lon])
@@ -96,9 +101,9 @@ function addMapMarker(lat, lon) {
 // -----------------------------
 function loadObjects() {
   fetch("/objects")
-    .then((res) => res.json())
-    .then((objects) => {
-      objects.forEach((obj) => {
+    .then(res => res.json())
+    .then(objects => {
+      objects.forEach(obj => {
         addARObject(obj.latitude, obj.longitude);
         addMapMarker(obj.latitude, obj.longitude);
       });

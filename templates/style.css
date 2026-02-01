@@ -4,7 +4,6 @@ body {
   font-family: Arial, sans-serif;
 }
 
-/* Button */
 #placeBtn {
   position: absolute;
   top: 15px;
@@ -18,19 +17,17 @@ body {
   cursor: pointer;
 }
 
-/* Map */
 #map {
   position: absolute;
   bottom: 10px;
   right: 10px;
   width: 300px;
-  height: 300px;
+  height: 300px;   /* MUST EXIST */
   z-index: 25;
   border: 2px solid black;
   background: white;
 }
 
-/* AR Scene */
 a-scene {
   z-index: 1;
 }
