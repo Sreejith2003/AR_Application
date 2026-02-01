@@ -26,12 +26,21 @@
 
 <a-scene
   embedded
-  arjs="gpsMinDistance: 10; gpsTimeInterval: 5000;"
+  arjs="
+    gpsMinDistance: 25;
+    gpsTimeInterval: 10000;
+    trackingMethod: best;
+  "
   vr-mode-ui="enabled: false">
 
-  <a-camera></a-camera>
+  <a-camera
+    gps-camera="simulateAltitude: true"
+    rotation-reader>
+  </a-camera>
+
   <a-light type="ambient" intensity="1"></a-light>
 </a-scene>
+
 
 <script src="/templates/script.js"></script>
 </body>
