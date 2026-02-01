@@ -1,6 +1,6 @@
-// -----------------------------
+// ------------------------------------
 // GLOBAL REFERENCES
-// -----------------------------
+// ------------------------------------
 const scene = document.querySelector("a-scene");
 const placeBtn = document.getElementById("placeBtn");
 
@@ -9,13 +9,24 @@ let userLat = null;
 let userLon = null;
 let objectsLoaded = false;
 
-// Fallback location (used only if GPS fails)
+// ------------------------------------
+// OWNER ID (PERSISTENT PER DEVICE)
+// ------------------------------------
+let OWNER_ID = localStorage.getItem("ar_owner_id");
+if (!OWNER_ID) {
+  OWNER_ID = crypto.randomUUID();
+  localStorage.setItem("ar_owner_id", OWNER_ID);
+}
+
+// ------------------------------------
+// FALLBACK LOCATION (IF GPS FAILS)
+// ------------------------------------
 const FALLBACK_LAT = 12.9716;
 const FALLBACK_LON = 77.5946;
 
-// -----------------------------
-// INIT MAP (ALWAYS)
-// -----------------------------
+// ------------------------------------
+// INITIALIZE MAP
+// ------------------------------------
 function initMap(lat, lon) {
   map = L.map("map").setView([lat, lon], 18);
 
@@ -28,15 +39,15 @@ function initMap(lat, lon) {
     .bindPopup("You are here")
     .openPopup();
 
-  // Place object by clicking map
+  // Click map to place object
   map.on("click", (e) => {
-    placeObject(e.latlng.lat, e.latlng.lng);
+    placeObject(e.latlng.lat, e.latlng.lng, "cube");
   });
 }
 
-// -----------------------------
-// GET GPS (NON-BLOCKING)
-// -----------------------------
+// ------------------------------------
+// GET GPS LOCATION
+// ------------------------------------
 navigator.geolocation.getCurrentPosition(
   (pos) => {
     userLat = pos.coords.latitude;
@@ -53,76 +64,147 @@ navigator.geolocation.getCurrentPosition(
   { enableHighAccuracy: true, timeout: 10000 }
 );
 
-// -----------------------------
-// BUTTON PLACEMENT (FALLBACK)
-// -----------------------------
+// ------------------------------------
+// PLACE OBJECT BUTTON
+// ------------------------------------
 placeBtn.onclick = () => {
   if (userLat && userLon) {
-    placeObject(userLat, userLon);
+    placeObject(userLat, userLon, "cube");
   } else {
     alert("Waiting for GPS...");
   }
 };
 
-// -----------------------------
-// PLACE OBJECT (BACKEND + UI)
-// -----------------------------
-function placeObject(lat, lon) {
+// ------------------------------------
+// PLACE OBJECT (BACKEND CALL)
+// ------------------------------------
+function placeObject(lat, lon, type) {
   fetch("/place", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ latitude: lat, longitude: lon })
-  }).then(() => {
-    addARObject(lat, lon);
-    addMapMarker(lat, lon);
-  });
+    body: JSON.stringify({
+      latitude: lat,
+      longitude: lon,
+      type: type,
+      owner: OWNER_ID
+    })
+  })
+    .then(res => {
+      if (!res.ok) throw new Error("Place failed");
+      return res.json();
+    })
+    .then(obj => {
+      renderObject(obj);
+    })
+    .catch(err => {
+      console.error(err);
+      alert("Failed to place object");
+    });
 }
 
-// -----------------------------
-// ADD AR OBJECT (FREEZE MODE)
-// -----------------------------
-function addARObject(lat, lon) {
-  const box = document.createElement("a-box");
+// ------------------------------------
+// RENDER OBJECT (AR + MAP)
+// ------------------------------------
+function renderObject(obj) {
+  addARObject(obj);
+  addMapMarker(obj);
+}
+
+// ------------------------------------
+// ADD AR OBJECT (FIXED / FROZEN)
+// ------------------------------------
+function addARObject(obj) {
+  let entity;
+
+  // Object types
+  if (obj.type === "cube") {
+    entity = document.createElement("a-box");
+    entity.setAttribute("scale", "0.4 0.4 0.4");
+    entity.setAttribute("color", "red");
+  } else if (obj.type === "sphere") {
+    entity = document.createElement("a-sphere");
+    entity.setAttribute("radius", "0.25");
+    entity.setAttribute("color", "blue");
+  } else {
+    return;
+  }
+
+  entity.classList.add("ar-object");
+  entity.dataset.id = obj.id;
+  entity.dataset.owner = obj.owner;
 
   // Initial GPS anchor
-  box.setAttribute(
+  entity.setAttribute(
     "gps-entity-place",
-    `latitude: ${lat}; longitude: ${lon}`
+    `latitude: ${obj.latitude}; longitude: ${obj.longitude}`
   );
 
-  // SMALL & MOBILE FRIENDLY
-  box.setAttribute("scale", "0.35 0.35 0.35");
-  box.setAttribute("color", "red");
+  scene.appendChild(entity);
 
-  scene.appendChild(box);
+  // Freeze after first GPS update
+  const freezeOnce = () => {
+    const fixedPos = entity.object3D.position.clone();
 
-  // 🔒 FREEZE OBJECT AFTER FIRST GPS UPDATE
-  box.addEventListener("gps-entity-place-update-position", () => {
-    const fixedPosition = box.object3D.position.clone();
+    entity.removeAttribute("gps-entity-place");
+    entity.object3D.position.copy(fixedPos);
 
-    // Remove GPS updates
-    box.removeAttribute("gps-entity-place");
+    // Lift object for visibility
+    entity.object3D.position.y = -0.3;
 
-    // Lock object in local space
-    box.object3D.position.copy(fixedPosition);
-    box.object3D.position.y = -0.7; // ground level
+    entity.removeEventListener(
+      "gps-entity-place-update-position",
+      freezeOnce
+    );
+  };
 
-    console.log("AR object frozen at fixed position");
-  });
+  entity.addEventListener(
+    "gps-entity-place-update-position",
+    freezeOnce
+  );
+
+  // Allow delete ONLY for owner
+  if (obj.owner === OWNER_ID) {
+    entity.addEventListener("click", () => {
+      if (confirm("Delete your object?")) {
+        deleteObject(obj.id, entity);
+      }
+    });
+  }
 }
 
-// -----------------------------
+// ------------------------------------
 // ADD MAP MARKER
-// -----------------------------
-function addMapMarker(lat, lon) {
-  L.marker([lat, lon])
+// ------------------------------------
+function addMapMarker(obj) {
+  L.marker([obj.latitude, obj.longitude])
     .addTo(map)
-    .bindPopup("AR Object");
+    .bindPopup(
+      obj.owner === OWNER_ID
+        ? "Your object (tap to delete)"
+        : "Shared object"
+    );
 }
 
-// -----------------------------
-// LOAD OBJECTS ONCE
-// -----------------------------
+// ------------------------------------
+// DELETE OBJECT (OWNER ONLY)
+// ------------------------------------
+function deleteObject(id, entity) {
+  fetch(`/delete/${id}?owner=${OWNER_ID}`, {
+    method: "DELETE"
+  })
+    .then(res => {
+      if (!res.ok) throw new Error("Delete failed");
+      entity.remove();
+    })
+    .catch(err => {
+      console.error(err);
+      alert("Failed to delete object");
+    });
+}
+
+// ------------------------------------
+// LOAD ALL SHARED OBJECTS (ONCE)
+// ------------------------------------
 function loadObjects() {
   if (objectsLoaded) return;
   objectsLoaded = true;
@@ -130,9 +212,6 @@ function loadObjects() {
   fetch("/objects")
     .then(res => res.json())
     .then(objects => {
-      objects.forEach(obj => {
-        addARObject(obj.latitude, obj.longitude);
-        addMapMarker(obj.latitude, obj.longitude);
-      });
+      objects.forEach(renderObject);
     });
 }
