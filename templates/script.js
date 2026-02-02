@@ -1,107 +1,91 @@
-// ================================
-// GLOBAL REFERENCES
-// ================================
 const scene = document.querySelector("a-scene");
 const cubeBtn = document.getElementById("cubeBtn");
 const imageBtn = document.getElementById("imageBtn");
 const imageInput = document.getElementById("imageInput");
 
-let map = null;
-let userLat = null;
-let userLon = null;
+let map, userLat, userLon;
 let loaded = false;
 
-// ================================
-// UNIQUE OWNER ID (PER DEVICE)
-// ================================
+// 🔑 Placement state
+let PLACE_MODE = null;
+let PENDING_LAT = null;
+let PENDING_LON = null;
+
+// OWNER ID
 let OWNER_ID = localStorage.getItem("ar_owner_id");
 if (!OWNER_ID) {
   OWNER_ID = crypto.randomUUID();
   localStorage.setItem("ar_owner_id", OWNER_ID);
 }
 
-// ================================
-// INITIALIZE MAP
-// ================================
+// MAP
 function initMap(lat, lon) {
   map = L.map("map").setView([lat, lon], 18);
 
-  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-    attribution: "© OpenStreetMap"
-  }).addTo(map);
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png").addTo(map);
 
-  L.marker([lat, lon])
-    .addTo(map)
-    .bindPopup("You are here")
-    .openPopup();
+  L.marker([lat, lon]).addTo(map).bindPopup("You").openPopup();
+
+  // 📍 TAP MAP TO PLACE
+  map.on("click", e => {
+    if (!PLACE_MODE) {
+      alert("Select Cube or Image first");
+      return;
+    }
+
+    PENDING_LAT = e.latlng.lat;
+    PENDING_LON = e.latlng.lng;
+
+    if (PLACE_MODE === "cube") {
+      placeObject(PENDING_LAT, PENDING_LON, "cube", null);
+      resetPlacement();
+    }
+
+    if (PLACE_MODE === "image") {
+      imageInput.click();
+    }
+  });
 }
 
-// ================================
-// GET GPS LOCATION
-// ================================
+// GPS
 navigator.geolocation.getCurrentPosition(
-  position => {
-    userLat = position.coords.latitude;
-    userLon = position.coords.longitude;
+  pos => {
+    userLat = pos.coords.latitude;
+    userLon = pos.coords.longitude;
     initMap(userLat, userLon);
     loadObjects();
   },
-  error => {
-    alert("GPS permission is required to use this app.");
-    console.error(error);
-  },
+  () => alert("GPS permission required"),
   { enableHighAccuracy: true }
 );
 
-// ================================
-// PLACE CUBE BUTTON
-// ================================
+// BUTTONS
 cubeBtn.onclick = () => {
-  if (userLat === null || userLon === null) {
-    alert("Waiting for GPS...");
-    return;
-  }
-  placeObject(userLat, userLon, "cube", null);
+  PLACE_MODE = "cube";
+  alert("Tap on the map to place the cube");
 };
 
-// ================================
-// PLACE IMAGE BUTTON
-// ================================
 imageBtn.onclick = () => {
-  if (userLat === null || userLon === null) {
-    alert("Waiting for GPS...");
-    return;
-  }
-  imageInput.click();
+  PLACE_MODE = "image";
+  alert("Tap on the map to place the image");
 };
 
-// ================================
-// IMAGE SELECTION
-// ================================
+// IMAGE UPLOAD
 imageInput.addEventListener("change", async e => {
   const file = e.target.files[0];
-  if (!file) return;
+  if (!file || PENDING_LAT === null) return;
 
-  const formData = new FormData();
-  formData.append("file", file);
+  const fd = new FormData();
+  fd.append("file", file);
 
-  try {
-    const res = await fetch("/upload", {
-      method: "POST",
-      body: formData
-    });
+  const res = await fetch("/upload", { method: "POST", body: fd });
+  const data = await res.json();
 
-    const data = await res.json();
-    placeObject(userLat, userLon, "image", data.url);
-  } catch (err) {
-    console.error(err);
-    alert("Image upload failed");
-  }
+  placeObject(PENDING_LAT, PENDING_LON, "image", data.url);
+  resetPlacement();
 });
 
-// ================================
-// PLACE OBJECT (BACKEND)
-// ================================
+// PLACE OBJECT
 function placeObject(lat, lon, type, asset) {
   fetch("/place", {
     method: "POST",
@@ -109,25 +93,16 @@ function placeObject(lat, lon, type, asset) {
     body: JSON.stringify({
       latitude: lat,
       longitude: lon,
-      type: type,
-      asset: asset,   // always present (null or URL)
+      type,
+      asset,
       owner: OWNER_ID
     })
   })
-    .then(res => {
-      if (!res.ok) throw new Error("Place failed");
-      return res.json();
-    })
-    .then(obj => renderObject(obj))
-    .catch(err => {
-      console.error(err);
-      alert("Failed to place object");
-    });
+    .then(res => res.json())
+    .then(renderObject);
 }
 
-// ================================
-// RENDER OBJECT (AR + MAP)
-// ================================
+// RENDER
 function renderObject(obj) {
   let el;
 
@@ -135,86 +110,50 @@ function renderObject(obj) {
     el = document.createElement("a-box");
     el.setAttribute("scale", "0.4 0.4 0.4");
     el.setAttribute("color", "red");
-  }
-  else if (obj.type === "image" && obj.asset) {
+  } else if (obj.type === "image" && obj.asset) {
     el = document.createElement("a-plane");
     el.setAttribute("src", obj.asset);
     el.setAttribute("width", "1");
     el.setAttribute("height", "1");
-  }
-  else {
-    return;
-  }
+  } else return;
 
   el.dataset.id = obj.id;
-
-  el.setAttribute(
-    "gps-entity-place",
-    `latitude:${obj.latitude}; longitude:${obj.longitude}`
-  );
-
+  el.setAttribute("gps-entity-place", `latitude:${obj.latitude}; longitude:${obj.longitude}`);
   scene.appendChild(el);
 
-  // Freeze object after first GPS placement
-  el.addEventListener(
-    "gps-entity-place-update-position",
-    () => {
-      const pos = el.object3D.position.clone();
-      el.removeAttribute("gps-entity-place");
-      el.object3D.position.copy(pos);
-      el.object3D.position.y = -0.3;
-    },
-    { once: true }
-  );
+  el.addEventListener("gps-entity-place-update-position", () => {
+    const p = el.object3D.position.clone();
+    el.removeAttribute("gps-entity-place");
+    el.object3D.position.copy(p);
+    el.object3D.position.y = -0.3;
+  }, { once: true });
 
-  // MAP MARKER
   const marker = L.marker([obj.latitude, obj.longitude]).addTo(map);
-
   if (obj.owner === OWNER_ID) {
-    marker.bindPopup(
-      `<button style="padding:8px;font-size:14px"
-        onclick="deleteObj('${obj.id}')">
-        🗑 Delete
-      </button>`
-    );
-  } else {
-    marker.bindPopup("Shared object");
+    marker.bindPopup(`<button onclick="deleteObj('${obj.id}')">🗑 Delete</button>`);
   }
 }
 
-// ================================
-// DELETE OBJECT (OWNER ONLY)
-// ================================
-window.deleteObj = function (id) {
-  fetch(`/delete/${id}?owner=${OWNER_ID}`, {
-    method: "DELETE"
-  })
-    .then(res => {
-      if (!res.ok) throw new Error("Delete failed");
-
-      // Remove AR entity
+// DELETE
+window.deleteObj = id => {
+  fetch(`/delete/${id}?owner=${OWNER_ID}`, { method: "DELETE" })
+    .then(() => {
       const el = document.querySelector(`[data-id="${id}"]`);
       if (el) el.remove();
-
-      alert("Object deleted");
-    })
-    .catch(err => {
-      console.error(err);
-      alert("Failed to delete object");
     });
 };
 
-// ================================
-// LOAD ALL OBJECTS (ONCE)
-// ================================
+// LOAD EXISTING
 function loadObjects() {
   if (loaded) return;
   loaded = true;
-
   fetch("/objects")
-    .then(res => res.json())
-    .then(objects => {
-      objects.forEach(renderObject);
-    })
-    .catch(err => console.error(err));
+    .then(r => r.json())
+    .then(list => list.forEach(renderObject));
+}
+
+function resetPlacement() {
+  PLACE_MODE = null;
+  PENDING_LAT = null;
+  PENDING_LON = null;
 }
