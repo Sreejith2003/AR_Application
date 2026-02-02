@@ -243,3 +243,65 @@ function resetPlacement() {
   PENDING_LAT = null;
   PENDING_LON = null;
 }
+
+
+// ================================
+// DRAG TO RESIZE MAP (TOUCH + MOUSE)
+// ================================
+const mapEl = document.getElementById("map");
+const resizer = document.getElementById("map-resizer");
+
+let resizing = false;
+let startX, startY, startWidth, startHeight;
+
+// START DRAG
+const startResize = (e) => {
+  e.preventDefault();
+  resizing = true;
+
+  const touch = e.touches ? e.touches[0] : e;
+  startX = touch.clientX;
+  startY = touch.clientY;
+
+  startWidth = mapEl.offsetWidth;
+  startHeight = mapEl.offsetHeight;
+
+  document.addEventListener("mousemove", resizeMap);
+  document.addEventListener("mouseup", stopResize);
+  document.addEventListener("touchmove", resizeMap);
+  document.addEventListener("touchend", stopResize);
+};
+
+// RESIZE
+const resizeMap = (e) => {
+  if (!resizing) return;
+
+  const touch = e.touches ? e.touches[0] : e;
+
+  const dx = touch.clientX - startX;
+  const dy = touch.clientY - startY;
+
+  let newWidth = startWidth + dx;
+  let newHeight = startHeight + dy;
+
+  // Limits (important for mobile)
+  newWidth = Math.max(150, Math.min(window.innerWidth - 20, newWidth));
+  newHeight = Math.max(150, Math.min(window.innerHeight - 120, newHeight));
+
+  mapEl.style.width = `${newWidth}px`;
+  mapEl.style.height = `${newHeight}px`;
+
+  if (map) map.invalidateSize();
+};
+
+// STOP DRAG
+const stopResize = () => {
+  resizing = false;
+  document.removeEventListener("mousemove", resizeMap);
+  document.removeEventListener("mouseup", stopResize);
+  document.removeEventListener("touchmove", resizeMap);
+  document.removeEventListener("touchend", stopResize);
+};
+
+resizer.addEventListener("mousedown", startResize);
+resizer.addEventListener("touchstart", startResize);
