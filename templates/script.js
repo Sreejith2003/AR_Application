@@ -40,7 +40,6 @@ function initMap(lat, lon) {
     .bindPopup("You are here")
     .openPopup();
 
-  // ✅ MAP CLICK = PLACE LOCATION
   map.on("click", e => {
     if (!PLACE_MODE) {
       alert("Select Cube or Image first");
@@ -79,7 +78,7 @@ navigator.geolocation.getCurrentPosition(
 );
 
 // ================================
-// BUTTONS (MODE ONLY)
+// BUTTONS
 // ================================
 cubeBtn.onclick = () => {
   PLACE_MODE = "cube";
@@ -101,19 +100,14 @@ imageInput.addEventListener("change", async e => {
   const formData = new FormData();
   formData.append("file", file);
 
-  try {
-    const res = await fetch("/upload", {
-      method: "POST",
-      body: formData
-    });
+  const res = await fetch("/upload", {
+    method: "POST",
+    body: formData
+  });
 
-    const data = await res.json();
-    placeObject(PENDING_LAT, PENDING_LON, "image", data.url);
-    resetPlacement();
-  } catch (err) {
-    console.error(err);
-    alert("Image upload failed");
-  }
+  const data = await res.json();
+  placeObject(PENDING_LAT, PENDING_LON, "image", data.url);
+  resetPlacement();
 });
 
 // ================================
@@ -126,50 +120,54 @@ function placeObject(lat, lon, type, asset) {
     body: JSON.stringify({
       latitude: lat,
       longitude: lon,
-      type: type,
-      asset: asset,
+      type,
+      asset,
       owner: OWNER_ID
     })
   })
-    .then(res => {
-      if (!res.ok) throw new Error("Place failed");
-      return res.json();
-    })
-    .then(obj => renderObject(obj))
-    .catch(err => {
-      console.error(err);
-      alert("Failed to place object");
-    });
+    .then(res => res.json())
+    .then(renderObject)
+    .catch(() => alert("Failed to place object"));
 }
 
 // ================================
-// RENDER OBJECT (AR + MAP)
+// RENDER OBJECT (FIXED & SCALED)
 // ================================
 function renderObject(obj) {
   let el;
 
-  // 🔳 REAL 3D CUBE
+  // 🔳 CORRECT 3D CUBE (HUMAN SCALE)
   if (obj.type === "cube") {
     el = document.createElement("a-box");
 
-    el.setAttribute("width", "0.6");
-    el.setAttribute("height", "0.6");
-    el.setAttribute("depth", "0.6");
+    el.setAttribute("width", "1.5");
+    el.setAttribute("height", "1.5");
+    el.setAttribute("depth", "1.5");
 
-    el.setAttribute("color", "#ff3b3b");
     el.setAttribute("rotation", "0 45 0");
-    el.setAttribute("material", "metalness:0.2; roughness:0.6");
+    el.setAttribute(
+      "material",
+      "color:#ff3333; metalness:0.15; roughness:0.6"
+    );
   }
 
-  // 🖼 BIG, CLEAR IMAGE
+  // 🖼 LARGE IMAGE BILLBOARD (CAMERA FACING)
   else if (obj.type === "image" && obj.asset) {
     el = document.createElement("a-plane");
 
     el.setAttribute("src", obj.asset);
-    el.setAttribute("width", "2.5");
-    el.setAttribute("height", "1.5");
-    el.setAttribute("rotation", "-10 0 0");
-    el.setAttribute("material", "side:double; shader:flat");
+
+    // VERY LARGE (REAL WORLD METERS)
+    el.setAttribute("width", "7");
+    el.setAttribute("height", "4");
+
+    // ALWAYS FACE CAMERA
+    el.setAttribute("look-at", "[gps-camera]");
+
+    el.setAttribute(
+      "material",
+      "side:double; shader:flat; opacity:1"
+    );
   }
   else {
     return;
@@ -184,7 +182,7 @@ function renderObject(obj) {
 
   scene.appendChild(el);
 
-  // Freeze object after first GPS placement
+  // 🔒 FREEZE POSITION + LIFT UP
   el.addEventListener(
     "gps-entity-place-update-position",
     () => {
@@ -192,50 +190,34 @@ function renderObject(obj) {
       el.removeAttribute("gps-entity-place");
       el.object3D.position.copy(pos);
 
-      // 🔼 Lift object above ground
-      el.object3D.position.y = 0.25;
+      // HEIGHT FIX
+      el.object3D.position.y = 1.2;
     },
     { once: true }
   );
 
   // MAP MARKER
   const marker = L.marker([obj.latitude, obj.longitude]).addTo(map);
-
   if (obj.owner === OWNER_ID) {
     marker.bindPopup(
-      `<button style="padding:8px;font-size:14px"
-        onclick="deleteObj('${obj.id}')">
-        🗑 Delete
-      </button>`
+      `<button onclick="deleteObj('${obj.id}')">🗑 Delete</button>`
     );
-  } else {
-    marker.bindPopup("Shared object");
   }
 }
 
 // ================================
-// DELETE OBJECT (OWNER ONLY)
+// DELETE OBJECT
 // ================================
-window.deleteObj = function (id) {
-  fetch(`/delete/${id}?owner=${OWNER_ID}`, {
-    method: "DELETE"
-  })
-    .then(res => {
-      if (!res.ok) throw new Error("Delete failed");
-
+window.deleteObj = id => {
+  fetch(`/delete/${id}?owner=${OWNER_ID}`, { method: "DELETE" })
+    .then(() => {
       const el = document.querySelector(`[data-id="${id}"]`);
       if (el) el.remove();
-
-      alert("Object deleted");
-    })
-    .catch(err => {
-      console.error(err);
-      alert("Failed to delete object");
     });
 };
 
 // ================================
-// LOAD ALL OBJECTS (ONCE)
+// LOAD OBJECTS
 // ================================
 function loadObjects() {
   if (loaded) return;
@@ -243,14 +225,11 @@ function loadObjects() {
 
   fetch("/objects")
     .then(res => res.json())
-    .then(objects => {
-      objects.forEach(renderObject);
-    })
-    .catch(err => console.error(err));
+    .then(list => list.forEach(renderObject));
 }
 
 // ================================
-// RESET PLACEMENT STATE
+// RESET
 // ================================
 function resetPlacement() {
   PLACE_MODE = null;
@@ -259,7 +238,7 @@ function resetPlacement() {
 }
 
 // ================================
-// DRAG TO RESIZE MAP (TOUCH + MOUSE)
+// MAP RESIZE (UNCHANGED)
 // ================================
 const mapEl = document.getElementById("map");
 const resizer = document.getElementById("map-resizer");
@@ -267,15 +246,13 @@ const resizer = document.getElementById("map-resizer");
 let resizing = false;
 let startX, startY, startWidth, startHeight;
 
-// START DRAG
-const startResize = (e) => {
+const startResize = e => {
   e.preventDefault();
   resizing = true;
 
-  const touch = e.touches ? e.touches[0] : e;
-  startX = touch.clientX;
-  startY = touch.clientY;
-
+  const t = e.touches ? e.touches[0] : e;
+  startX = t.clientX;
+  startY = t.clientY;
   startWidth = mapEl.offsetWidth;
   startHeight = mapEl.offsetHeight;
 
@@ -285,28 +262,21 @@ const startResize = (e) => {
   document.addEventListener("touchend", stopResize);
 };
 
-// RESIZE
-const resizeMap = (e) => {
+const resizeMap = e => {
   if (!resizing) return;
+  const t = e.touches ? e.touches[0] : e;
 
-  const touch = e.touches ? e.touches[0] : e;
+  let w = startWidth + (t.clientX - startX);
+  let h = startHeight + (t.clientY - startY);
 
-  const dx = touch.clientX - startX;
-  const dy = touch.clientY - startY;
+  w = Math.max(180, Math.min(window.innerWidth - 20, w));
+  h = Math.max(180, Math.min(window.innerHeight - 120, h));
 
-  let newWidth = startWidth + dx;
-  let newHeight = startHeight + dy;
-
-  newWidth = Math.max(150, Math.min(window.innerWidth - 20, newWidth));
-  newHeight = Math.max(150, Math.min(window.innerHeight - 120, newHeight));
-
-  mapEl.style.width = `${newWidth}px`;
-  mapEl.style.height = `${newHeight}px`;
-
+  mapEl.style.width = `${w}px`;
+  mapEl.style.height = `${h}px`;
   if (map) map.invalidateSize();
 };
 
-// STOP DRAG
 const stopResize = () => {
   resizing = false;
   document.removeEventListener("mousemove", resizeMap);
