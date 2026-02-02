@@ -19,13 +19,21 @@
 
 <a-scene
   embedded
+  shadow="type: pcfsoft"
   arjs="gpsMinDistance:25; gpsTimeInterval:10000;"
   vr-mode-ui="enabled:false">
 
-  <a-camera gps-camera="simulateAltitude:true" rotation-reader></a-camera>
-  <a-light type="ambient" intensity="1"></a-light>
-  <a-light type="ambient" intensity="0.8"></a-light>
-  <a-light type="directional" intensity="0.7" position="1 2 1"></a-light>
+
+  <a-camera gps-camera rotation-reader shadow="receive: true"></a-camera>
+  <a-light type="ambient" intensity="0.5"></a-light>
+
+  <a-light
+    type="directional"
+    intensity="1.0"
+    position="2 4 1"
+    castShadow="true">
+  </a-light>
+
 
 </a-scene>
 

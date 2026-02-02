@@ -125,18 +125,34 @@ function renderObject(obj) {
 
   // 🔳 REAL 3D CUBE
   if (obj.type === "cube") {
-    el = document.createElement("a-box");
+  el = document.createElement("a-box");
 
-    el.setAttribute("width", "1.5");
-    el.setAttribute("height", "1.5");
-    el.setAttribute("depth", "1.5");
+  // REAL-WORLD SIZE (VISIBLE)
+  el.setAttribute("width", "2");
+  el.setAttribute("height", "2");
+  el.setAttribute("depth", "2");
 
-    el.setAttribute("rotation", "0 45 0");
-    el.setAttribute(
-      "material",
-      "color:#ff3333; metalness:0.2; roughness:0.5"
-    );
-  }
+  // ROTATION TO SHOW MULTIPLE FACES
+  el.setAttribute("rotation", "20 45 0");
+
+  // PHYSICALLY BASED MATERIAL (THIS MAKES IT 3D)
+  el.setAttribute(
+    "material",
+    `
+      color: #e63946;
+      metalness: 0.1;
+      roughness: 0.4;
+      shader: standard;
+    `
+  );
+
+  // HEIGHT (DO NOT TOUCH X/Z)
+  el.setAttribute("position", "0 1 0");
+
+  // ENABLE SHADOWS
+  el.setAttribute("shadow", "cast: true; receive: true");
+}
+
 
   // 🖼 IMAGE — BIG & ALWAYS FACING CAMERA
   else if (obj.type === "image" && obj.asset) {
