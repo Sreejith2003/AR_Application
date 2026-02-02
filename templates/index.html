@@ -14,7 +14,7 @@
 </head>
 
 <body>
-  
+
 <div id="map-resizer"></div>
 
 <a-scene
@@ -24,7 +24,11 @@
 
   <a-camera gps-camera="simulateAltitude:true" rotation-reader></a-camera>
   <a-light type="ambient" intensity="1"></a-light>
+  <a-light type="ambient" intensity="0.8"></a-light>
+  <a-light type="directional" intensity="0.7" position="1 2 1"></a-light>
+
 </a-scene>
+
 
 <div id="map"></div>
 
@@ -36,5 +40,8 @@
 <input type="file" id="imageInput" accept="image/*" hidden />
 
 <script src="/templates/script.js"></script>
+<!-- Make planes face the camera -->
+<script src="https://unpkg.com/aframe-look-at-component@0.8.0/dist/aframe-look-at-component.min.js"></script>
+
 </body>
 </html>

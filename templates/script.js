@@ -7,12 +7,10 @@ const imageBtn = document.getElementById("imageBtn");
 const imageInput = document.getElementById("imageInput");
 
 let map = null;
-let userLat = null;
-let userLon = null;
 let loaded = false;
 
-// 🔑 Placement state
-let PLACE_MODE = null;        // "cube" | "image"
+// Placement state
+let PLACE_MODE = null;
 let PENDING_LAT = null;
 let PENDING_LON = null;
 
@@ -35,10 +33,7 @@ function initMap(lat, lon) {
     attribution: "© OpenStreetMap"
   }).addTo(map);
 
-  L.marker([lat, lon])
-    .addTo(map)
-    .bindPopup("You are here")
-    .openPopup();
+  L.marker([lat, lon]).addTo(map).bindPopup("You are here").openPopup();
 
   map.on("click", e => {
     if (!PLACE_MODE) {
@@ -64,16 +59,11 @@ function initMap(lat, lon) {
 // GET GPS LOCATION
 // ================================
 navigator.geolocation.getCurrentPosition(
-  position => {
-    userLat = position.coords.latitude;
-    userLon = position.coords.longitude;
-    initMap(userLat, userLon);
+  pos => {
+    initMap(pos.coords.latitude, pos.coords.longitude);
     loadObjects();
   },
-  error => {
-    alert("GPS permission is required to use this app.");
-    console.error(error);
-  },
+  () => alert("GPS permission required"),
   { enableHighAccuracy: true }
 );
 
@@ -91,21 +81,18 @@ imageBtn.onclick = () => {
 };
 
 // ================================
-// IMAGE SELECTION
+// IMAGE UPLOAD
 // ================================
 imageInput.addEventListener("change", async e => {
   const file = e.target.files[0];
   if (!file || PENDING_LAT === null) return;
 
-  const formData = new FormData();
-  formData.append("file", file);
+  const fd = new FormData();
+  fd.append("file", file);
 
-  const res = await fetch("/upload", {
-    method: "POST",
-    body: formData
-  });
-
+  const res = await fetch("/upload", { method: "POST", body: fd });
   const data = await res.json();
+
   placeObject(PENDING_LAT, PENDING_LON, "image", data.url);
   resetPlacement();
 });
@@ -127,16 +114,16 @@ function placeObject(lat, lon, type, asset) {
   })
     .then(res => res.json())
     .then(renderObject)
-    .catch(() => alert("Failed to place object"));
+    .catch(() => alert("Place failed"));
 }
 
 // ================================
-// RENDER OBJECT (FIXED & SCALED)
+// RENDER OBJECT (FINAL FIXED VERSION)
 // ================================
 function renderObject(obj) {
   let el;
 
-  // 🔳 CORRECT 3D CUBE (HUMAN SCALE)
+  // 🔳 REAL 3D CUBE
   if (obj.type === "cube") {
     el = document.createElement("a-box");
 
@@ -147,34 +134,22 @@ function renderObject(obj) {
     el.setAttribute("rotation", "0 45 0");
     el.setAttribute(
       "material",
-      "color:#ff3333; metalness:0.15; roughness:0.6"
+      "color:#ff3333; metalness:0.2; roughness:0.5"
     );
   }
 
-  // 🖼 LARGE IMAGE BILLBOARD (CAMERA FACING)
+  // 🖼 IMAGE — BIG & ALWAYS FACING CAMERA
   else if (obj.type === "image" && obj.asset) {
     el = document.createElement("a-plane");
 
     el.setAttribute("src", obj.asset);
-
-    // VERY LARGE (REAL WORLD METERS)
-    el.setAttribute("width", "7");
-    el.setAttribute("height", "4");
-
-    // ALWAYS FACE CAMERA
+    el.setAttribute("width", "8");
+    el.setAttribute("height", "4.5");
     el.setAttribute("look-at", "[gps-camera]");
-
-    el.setAttribute(
-      "material",
-      "side:double; shader:flat; opacity:1"
-    );
-  }
-  else {
-    return;
-  }
+    el.setAttribute("material", "side:double; shader:flat");
+  } else return;
 
   el.dataset.id = obj.id;
-
   el.setAttribute(
     "gps-entity-place",
     `latitude:${obj.latitude}; longitude:${obj.longitude}`
@@ -182,7 +157,7 @@ function renderObject(obj) {
 
   scene.appendChild(el);
 
-  // 🔒 FREEZE POSITION + LIFT UP
+  // 🔒 Freeze GPS & lift object
   el.addEventListener(
     "gps-entity-place-update-position",
     () => {
@@ -190,8 +165,9 @@ function renderObject(obj) {
       el.removeAttribute("gps-entity-place");
       el.object3D.position.copy(pos);
 
-      // HEIGHT FIX
-      el.object3D.position.y = 1.2;
+      // Height fix
+      el.object3D.position.y =
+        obj.type === "cube" ? 0.75 : 1.6;
     },
     { once: true }
   );
@@ -206,7 +182,7 @@ function renderObject(obj) {
 }
 
 // ================================
-// DELETE OBJECT
+// DELETE
 // ================================
 window.deleteObj = id => {
   fetch(`/delete/${id}?owner=${OWNER_ID}`, { method: "DELETE" })
@@ -236,54 +212,3 @@ function resetPlacement() {
   PENDING_LAT = null;
   PENDING_LON = null;
 }
-
-// ================================
-// MAP RESIZE (UNCHANGED)
-// ================================
-const mapEl = document.getElementById("map");
-const resizer = document.getElementById("map-resizer");
-
-let resizing = false;
-let startX, startY, startWidth, startHeight;
-
-const startResize = e => {
-  e.preventDefault();
-  resizing = true;
-
-  const t = e.touches ? e.touches[0] : e;
-  startX = t.clientX;
-  startY = t.clientY;
-  startWidth = mapEl.offsetWidth;
-  startHeight = mapEl.offsetHeight;
-
-  document.addEventListener("mousemove", resizeMap);
-  document.addEventListener("mouseup", stopResize);
-  document.addEventListener("touchmove", resizeMap);
-  document.addEventListener("touchend", stopResize);
-};
-
-const resizeMap = e => {
-  if (!resizing) return;
-  const t = e.touches ? e.touches[0] : e;
-
-  let w = startWidth + (t.clientX - startX);
-  let h = startHeight + (t.clientY - startY);
-
-  w = Math.max(180, Math.min(window.innerWidth - 20, w));
-  h = Math.max(180, Math.min(window.innerHeight - 120, h));
-
-  mapEl.style.width = `${w}px`;
-  mapEl.style.height = `${h}px`;
-  if (map) map.invalidateSize();
-};
-
-const stopResize = () => {
-  resizing = false;
-  document.removeEventListener("mousemove", resizeMap);
-  document.removeEventListener("mouseup", stopResize);
-  document.removeEventListener("touchmove", resizeMap);
-  document.removeEventListener("touchend", stopResize);
-};
-
-resizer.addEventListener("mousedown", startResize);
-resizer.addEventListener("touchstart", startResize);
