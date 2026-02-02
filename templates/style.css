@@ -4,8 +4,19 @@ body {
   font-family: system-ui, sans-serif;
 }
 
+/* AR scene must be behind UI */
+a-scene {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1;
+}
+
+/* MAP */
 #map {
-  position: absolute;
+  position: fixed;
   bottom: 90px;
   right: 10px;
   width: 45vw;
@@ -15,20 +26,24 @@ body {
   border-radius: 12px;
   z-index: 20;
   border: 2px solid #000;
+  background: white;
 }
 
+/* CONTROL BAR */
 #controls {
   position: fixed;
   bottom: 0;
+  left: 0;
   width: 100%;
   height: 80px;
-  background: rgba(0,0,0,0.85);
+  background: rgba(0, 0, 0, 0.85);
   display: flex;
   justify-content: space-around;
   align-items: center;
-  z-index: 30;
+  z-index: 9999; /* 🔥 VERY IMPORTANT */
 }
 
+/* BUTTONS */
 #controls button {
   flex: 1;
   margin: 10px;
