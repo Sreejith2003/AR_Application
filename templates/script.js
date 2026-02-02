@@ -56,7 +56,7 @@ function initMap(lat, lon) {
     }
 
     if (PLACE_MODE === "image") {
-      imageInput.click(); // wait for image selection
+      imageInput.click();
     }
   });
 }
@@ -148,16 +148,28 @@ function placeObject(lat, lon, type, asset) {
 function renderObject(obj) {
   let el;
 
+  // 🔳 REAL 3D CUBE
   if (obj.type === "cube") {
     el = document.createElement("a-box");
-    el.setAttribute("scale", "0.4 0.4 0.4");
-    el.setAttribute("color", "red");
+
+    el.setAttribute("width", "0.6");
+    el.setAttribute("height", "0.6");
+    el.setAttribute("depth", "0.6");
+
+    el.setAttribute("color", "#ff3b3b");
+    el.setAttribute("rotation", "0 45 0");
+    el.setAttribute("material", "metalness:0.2; roughness:0.6");
   }
+
+  // 🖼 BIG, CLEAR IMAGE
   else if (obj.type === "image" && obj.asset) {
     el = document.createElement("a-plane");
+
     el.setAttribute("src", obj.asset);
-    el.setAttribute("width", "1");
-    el.setAttribute("height", "1");
+    el.setAttribute("width", "2.5");
+    el.setAttribute("height", "1.5");
+    el.setAttribute("rotation", "-10 0 0");
+    el.setAttribute("material", "side:double; shader:flat");
   }
   else {
     return;
@@ -179,7 +191,9 @@ function renderObject(obj) {
       const pos = el.object3D.position.clone();
       el.removeAttribute("gps-entity-place");
       el.object3D.position.copy(pos);
-      el.object3D.position.y = -0.3;
+
+      // 🔼 Lift object above ground
+      el.object3D.position.y = 0.25;
     },
     { once: true }
   );
@@ -244,7 +258,6 @@ function resetPlacement() {
   PENDING_LON = null;
 }
 
-
 // ================================
 // DRAG TO RESIZE MAP (TOUCH + MOUSE)
 // ================================
@@ -284,7 +297,6 @@ const resizeMap = (e) => {
   let newWidth = startWidth + dx;
   let newHeight = startHeight + dy;
 
-  // Limits (important for mobile)
   newWidth = Math.max(150, Math.min(window.innerWidth - 20, newWidth));
   newHeight = Math.max(150, Math.min(window.innerHeight - 120, newHeight));
 
