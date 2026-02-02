@@ -1,18 +1,19 @@
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+from typing import Optional
 import sqlite3
 import uuid
 import time
 import os
 
+# -------------------------
+# APP SETUP
+# -------------------------
 app = FastAPI()
 
-# -------------------------
-# CORS
-# -------------------------
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -20,22 +21,22 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
 # -------------------------
 # STATIC FILES
 # -------------------------
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+app.mount("/templates", StaticFiles(directory=os.path.join(BASE_DIR, "templates")), name="templates")
 
-app.mount(
-    "/templates",
-    StaticFiles(directory=os.path.join(BASE_DIR, "templates")),
-    name="templates",
-)
+UPLOAD_DIR = os.path.join(BASE_DIR, "uploads")
+os.makedirs(UPLOAD_DIR, exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
 
 # -------------------------
-# ROOT ROUTE (IMPORTANT)
+# ROOT
 # -------------------------
 @app.get("/", response_class=HTMLResponse)
-def read_root():
+def index():
     with open(os.path.join(BASE_DIR, "templates", "index.html"), "r", encoding="utf-8") as f:
         return f.read()
 
@@ -51,6 +52,7 @@ CREATE TABLE IF NOT EXISTS objects (
     latitude REAL,
     longitude REAL,
     type TEXT,
+    asset TEXT,
     owner TEXT,
     created_at INTEGER
 )
@@ -64,7 +66,22 @@ class PlaceObject(BaseModel):
     latitude: float
     longitude: float
     type: str
+    asset: Optional[str] = None   # ✅ IMPORTANT
     owner: str
+
+# -------------------------
+# UPLOAD IMAGE
+# -------------------------
+@app.post("/upload")
+def upload_image(file: UploadFile = File(...)):
+    ext = file.filename.split(".")[-1]
+    filename = f"{uuid.uuid4()}.{ext}"
+    path = os.path.join(UPLOAD_DIR, filename)
+
+    with open(path, "wb") as f:
+        f.write(file.file.read())
+
+    return {"url": f"/uploads/{filename}"}
 
 # -------------------------
 # PLACE OBJECT
@@ -72,17 +89,18 @@ class PlaceObject(BaseModel):
 @app.post("/place")
 def place_object(data: PlaceObject):
     obj_id = str(uuid.uuid4())
-    created_at = int(time.time())
+    ts = int(time.time())
 
     cursor.execute("""
-        INSERT INTO objects VALUES (?, ?, ?, ?, ?, ?)
+        INSERT INTO objects VALUES (?, ?, ?, ?, ?, ?, ?)
     """, (
         obj_id,
         data.latitude,
         data.longitude,
         data.type,
+        data.asset,
         data.owner,
-        created_at
+        ts
     ))
     conn.commit()
 
@@ -91,8 +109,9 @@ def place_object(data: PlaceObject):
         "latitude": data.latitude,
         "longitude": data.longitude,
         "type": data.type,
+        "asset": data.asset,
         "owner": data.owner,
-        "created_at": created_at
+        "created_at": ts
     }
 
 # -------------------------
@@ -100,10 +119,7 @@ def place_object(data: PlaceObject):
 # -------------------------
 @app.get("/objects")
 def get_objects():
-    cursor.execute("""
-        SELECT id, latitude, longitude, type, owner, created_at
-        FROM objects
-    """)
+    cursor.execute("SELECT * FROM objects")
     rows = cursor.fetchall()
 
     return [
@@ -112,8 +128,9 @@ def get_objects():
             "latitude": r[1],
             "longitude": r[2],
             "type": r[3],
-            "owner": r[4],
-            "created_at": r[5]
+            "asset": r[4],
+            "owner": r[5],
+            "created_at": r[6]
         }
         for r in rows
     ]
@@ -121,18 +138,18 @@ def get_objects():
 # -------------------------
 # DELETE OBJECT (OWNER ONLY)
 # -------------------------
-@app.delete("/delete/{object_id}")
-def delete_object(object_id: str, owner: str):
-    cursor.execute("SELECT owner FROM objects WHERE id=?", (object_id,))
+@app.delete("/delete/{obj_id}")
+def delete_object(obj_id: str, owner: str):
+    cursor.execute("SELECT owner FROM objects WHERE id=?", (obj_id,))
     row = cursor.fetchone()
 
     if not row:
         raise HTTPException(status_code=404, detail="Object not found")
 
     if row[0] != owner:
-        raise HTTPException(status_code=403, detail="Not object owner")
+        raise HTTPException(status_code=403, detail="Not owner")
 
-    cursor.execute("DELETE FROM objects WHERE id=?", (object_id,))
+    cursor.execute("DELETE FROM objects WHERE id=?", (obj_id,))
     conn.commit()
 
     return {"status": "deleted"}
