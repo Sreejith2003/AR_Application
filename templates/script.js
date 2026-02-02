@@ -165,9 +165,9 @@ function renderObject(obj) {
       el.removeAttribute("gps-entity-place");
       el.object3D.position.copy(pos);
 
-      // Height fix
-      el.object3D.position.y =
-        obj.type === "cube" ? 0.75 : 1.6;
+      // Keep GPS anchor — ONLY adjust height
+      el.object3D.position.y = obj.type === "cube" ? 0.75 : 1.6;
+
     },
     { once: true }
   );
