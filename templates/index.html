@@ -15,6 +15,7 @@
 
 <body>
 
+
 <div id="map-resizer"></div>
 
 <a-scene
@@ -37,13 +38,25 @@
 
 </a-scene>
 
+<div id = "camera-frame"></div>
+<div id="reticle">+</div>
 
 <div id="map"></div>
 
 <div id="controls">
-  <button id="cubeBtn">📦 Cube</button>
-  <button id="imageBtn">🖼 Image</button>
+  <button id="cubeBtn" class="action-btn cube">
+    🧊 Place Cube
+  </button>
+
+  <button id="imageBtn" class="action-btn image">
+    🖼 Place Image
+  </button>
 </div>
+
+<div id="hint">
+  👆 Choose an object, then tap on the map
+</div>
+
 
 <input type="file" id="imageInput" accept="image/*" hidden />
 
