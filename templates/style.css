@@ -19,7 +19,7 @@ a-scene {
 
 /* ===============================
    MAP
-================================ */
+================================ 
 #map {
   position: fixed;
   bottom: 100px;
@@ -34,6 +34,35 @@ a-scene {
   background: white;
   box-shadow: 0 12px 30px rgba(0, 0, 0, 0.5);
 }
+
+*/
+
+/* ===============================
+   MAP (PHONE + DESKTOP SAFE)
+================================ */
+#map {
+  position: fixed;
+  bottom: 100px;
+  right: 12px;
+
+  /* ✅ Controlled size */
+  width: 38vw;
+  height: 38vw;
+
+  /* ✅ Hard limits */
+  max-width: 220px;
+  max-height: 220px;
+  min-width: 160px;
+  min-height: 160px;
+
+  border-radius: 16px;
+  border: 2px solid rgba(255, 255, 255, 0.9);
+  background: white;
+
+  z-index: 20;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.45);
+}
+
 
 /* ===============================
    CONTROL BAR
@@ -157,4 +186,42 @@ a-scene {
   color: rgba(255, 255, 255, 0.8);
   z-index: 15;
   pointer-events: none;
+}
+
+/* ===============================
+   MOBILE OPTIMIZATION (CRITICAL)
+================================ */
+@media (max-width: 768px) {
+
+  /* Bigger buttons for thumbs */
+  .action-btn {
+    height: 64px;
+    font-size: 17px;
+  }
+
+  /* Map should be usable */
+  #map {
+    width: 70vw;
+    height: 70vw;
+    max-width: none;
+    max-height: none;
+    bottom: 110px;
+  }
+
+  /* Camera frame thinner on phone */
+  #camera-frame {
+    inset: 8px;
+    border-width: 1.5px;
+  }
+
+  /* Reticle more visible */
+  #reticle {
+    font-size: 34px;
+  }
+
+  /* Hint text readable */
+  #hint {
+    font-size: 15px;
+    padding: 12px 18px;
+  }
 }

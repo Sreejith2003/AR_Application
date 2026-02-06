@@ -228,3 +228,13 @@ function resetPlacement() {
   PENDING_LAT = null;
   PENDING_LON = null;
 }
+
+const mapToggle = document.getElementById("mapToggle");
+let mapOpen = true;
+
+mapToggle.onclick = () => {
+  mapOpen = !mapOpen;
+  document.getElementById("map").style.display =
+    mapOpen ? "block" : "none";
+};
+
