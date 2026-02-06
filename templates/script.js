@@ -5,9 +5,14 @@ const scene = document.querySelector("a-scene");
 const cubeBtn = document.getElementById("cubeBtn");
 const imageBtn = document.getElementById("imageBtn");
 const imageInput = document.getElementById("imageInput");
+const mapArrow = document.getElementById("map-arrow");
 
 let map = null;
 let loaded = false;
+
+// Compass
+let currentHeading = 0;
+let placedObjects = [];
 
 // Placement state
 let PLACE_MODE = null;
@@ -15,7 +20,7 @@ let PENDING_LAT = null;
 let PENDING_LON = null;
 
 // ================================
-// UNIQUE OWNER ID (PER DEVICE)
+// UNIQUE OWNER ID
 // ================================
 let OWNER_ID = localStorage.getItem("ar_owner_id");
 if (!OWNER_ID) {
@@ -47,16 +52,14 @@ function initMap(lat, lon) {
     if (PLACE_MODE === "cube") {
       placeObject(PENDING_LAT, PENDING_LON, "cube", null);
       resetPlacement();
-    }
-
-    if (PLACE_MODE === "image") {
+    } else if (PLACE_MODE === "image") {
       imageInput.click();
     }
   });
 }
 
 // ================================
-// GET GPS LOCATION
+// GPS LOCATION
 // ================================
 navigator.geolocation.getCurrentPosition(
   pos => {
@@ -98,7 +101,7 @@ imageInput.addEventListener("change", async e => {
 });
 
 // ================================
-// PLACE OBJECT (BACKEND)
+// PLACE OBJECT
 // ================================
 function placeObject(lat, lon, type, asset) {
   fetch("/place", {
@@ -118,43 +121,31 @@ function placeObject(lat, lon, type, asset) {
 }
 
 // ================================
-// RENDER OBJECT (FINAL FIXED VERSION)
+// RENDER OBJECT (FIXED IN WORLD)
 // ================================
 function renderObject(obj) {
+  placedObjects.push(obj);
+
   let el;
 
-  // 🔳 REAL 3D CUBE
+  // ✅ REAL 3D CUBE
   if (obj.type === "cube") {
-  el = document.createElement("a-box");
+    el = document.createElement("a-box");
 
-  // REAL-WORLD SIZE (VISIBLE)
-  el.setAttribute("width", "2");
-  el.setAttribute("height", "2");
-  el.setAttribute("depth", "2");
+    el.setAttribute("width", "2");
+    el.setAttribute("height", "2");
+    el.setAttribute("depth", "2");
 
-  // ROTATION TO SHOW MULTIPLE FACES
-  el.setAttribute("rotation", "20 45 0");
+    el.setAttribute("rotation", "25 45 0");
+    el.setAttribute(
+      "material",
+      "color:#e63946; metalness:0.15; roughness:0.4; shader:standard"
+    );
 
-  // PHYSICALLY BASED MATERIAL (THIS MAKES IT 3D)
-  el.setAttribute(
-    "material",
-    `
-      color: #e63946;
-      metalness: 0.1;
-      roughness: 0.4;
-      shader: standard;
-    `
-  );
+    el.setAttribute("shadow", "cast:true; receive:true");
+  }
 
-  // HEIGHT (DO NOT TOUCH X/Z)
-  el.setAttribute("position", "0 1 0");
-
-  // ENABLE SHADOWS
-  el.setAttribute("shadow", "cast: true; receive: true");
-}
-
-
-  // 🖼 IMAGE — BIG & ALWAYS FACING CAMERA
+  // ✅ IMAGE BILLBOARD (FACES CAMERA)
   else if (obj.type === "image" && obj.asset) {
     el = document.createElement("a-plane");
 
@@ -166,6 +157,8 @@ function renderObject(obj) {
   } else return;
 
   el.dataset.id = obj.id;
+
+  // 🔒 GPS ANCHOR (ONE-TIME)
   el.setAttribute(
     "gps-entity-place",
     `latitude:${obj.latitude}; longitude:${obj.longitude}`
@@ -173,17 +166,17 @@ function renderObject(obj) {
 
   scene.appendChild(el);
 
-  // 🔒 Freeze GPS & lift object
+  // 🔒 FREEZE POSITION (THIS MAKES IT FIXED)
   el.addEventListener(
     "gps-entity-place-update-position",
     () => {
-      const pos = el.object3D.position.clone();
-      el.removeAttribute("gps-entity-place");
-      el.object3D.position.copy(pos);
+      const fixedPos = el.object3D.position.clone();
 
-      // Keep GPS anchor — ONLY adjust height
+      el.removeAttribute("gps-entity-place"); // ❗ IMPORTANT
+      el.object3D.position.copy(fixedPos);
+
+      // lift slightly for visibility
       el.object3D.position.y = obj.type === "cube" ? 0.75 : 1.6;
-
     },
     { once: true }
   );
@@ -198,13 +191,13 @@ function renderObject(obj) {
 }
 
 // ================================
-// DELETE
+// DELETE OBJECT
 // ================================
 window.deleteObj = id => {
   fetch(`/delete/${id}?owner=${OWNER_ID}`, { method: "DELETE" })
     .then(() => {
-      const el = document.querySelector(`[data-id="${id}"]`);
-      if (el) el.remove();
+      document.querySelector(`[data-id="${id}"]`)?.remove();
+      placedObjects = placedObjects.filter(o => o.id !== id);
     });
 };
 
@@ -221,7 +214,7 @@ function loadObjects() {
 }
 
 // ================================
-// RESET
+// RESET PLACEMENT
 // ================================
 function resetPlacement() {
   PLACE_MODE = null;
@@ -229,12 +222,41 @@ function resetPlacement() {
   PENDING_LON = null;
 }
 
-const mapToggle = document.getElementById("mapToggle");
-let mapOpen = true;
+// ================================
+// COMPASS / ARROW LOGIC
+// ================================
+window.addEventListener("deviceorientationabsolute", e => {
+  if (e.alpha !== null) {
+    currentHeading = e.alpha;
+    updateArrow();
+  }
+});
 
-mapToggle.onclick = () => {
-  mapOpen = !mapOpen;
-  document.getElementById("map").style.display =
-    mapOpen ? "block" : "none";
-};
+function getBearing(lat1, lon1, lat2, lon2) {
+  const toRad = d => (d * Math.PI) / 180;
+  const y = Math.sin(toRad(lon2 - lon1)) * Math.cos(toRad(lat2));
+  const x =
+    Math.cos(toRad(lat1)) * Math.sin(toRad(lat2)) -
+    Math.sin(toRad(lat1)) *
+      Math.cos(toRad(lat2)) *
+      Math.cos(toRad(lon2 - lon1));
+  return (Math.atan2(y, x) * 180) / Math.PI + 360;
+}
 
+function updateArrow() {
+  if (!map || placedObjects.length === 0 || !mapArrow) return;
+
+  const center = map.getCenter();
+
+  // nearest object (simple version)
+  const target = placedObjects[0];
+
+  const bearing = getBearing(
+    center.lat,
+    center.lng,
+    target.latitude,
+    target.longitude
+  );
+
+  mapArrow.style.transform = `rotate(${bearing - currentHeading}deg)`;
+}
