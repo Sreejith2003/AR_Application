@@ -9,9 +9,6 @@ import uuid
 import time
 import os
 
-# -------------------------
-# APP SETUP
-# -------------------------
 app = FastAPI()
 
 app.add_middleware(
@@ -23,30 +20,28 @@ app.add_middleware(
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-# -------------------------
-# STATIC FILES
-# -------------------------
+# ---------------- STATIC FILES ----------------
 app.mount("/templates", StaticFiles(directory=os.path.join(BASE_DIR, "templates")), name="templates")
 
 UPLOAD_DIR = os.path.join(BASE_DIR, "uploads")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
 
-# -------------------------
-# ROOT
-# -------------------------
+# ---------------- ROOT ----------------
 @app.get("/", response_class=HTMLResponse)
 def index():
     with open(os.path.join(BASE_DIR, "templates", "index.html"), "r", encoding="utf-8") as f:
         return f.read()
 
-# -------------------------
-# DATABASE
-# -------------------------
-conn = sqlite3.connect("ar.db", check_same_thread=False)
-cursor = conn.cursor()
+# ---------------- DATABASE ----------------
+DB_PATH = os.path.join(BASE_DIR, "ar.db")
+conn = sqlite3.connect(DB_PATH, check_same_thread=False)
 
-cursor.execute("""
+def get_cursor():
+    return conn.cursor()
+
+cur = get_cursor()
+cur.execute("""
 CREATE TABLE IF NOT EXISTS objects (
     id TEXT PRIMARY KEY,
     latitude REAL,
@@ -59,39 +54,34 @@ CREATE TABLE IF NOT EXISTS objects (
 """)
 conn.commit()
 
-# -------------------------
-# MODELS
-# -------------------------
+# ---------------- MODELS ----------------
 class PlaceObject(BaseModel):
     latitude: float
     longitude: float
     type: str
-    asset: Optional[str] = None   # ✅ IMPORTANT
+    asset: Optional[str] = None
     owner: str
 
-# -------------------------
-# UPLOAD IMAGE
-# -------------------------
+# ---------------- UPLOAD IMAGE ----------------
 @app.post("/upload")
 def upload_image(file: UploadFile = File(...)):
     ext = file.filename.split(".")[-1]
-    filename = f"{uuid.uuid4()}.{ext}"
-    path = os.path.join(UPLOAD_DIR, filename)
+    name = f"{uuid.uuid4()}.{ext}"
+    path = os.path.join(UPLOAD_DIR, name)
 
     with open(path, "wb") as f:
         f.write(file.file.read())
 
-    return {"url": f"/uploads/{filename}"}
+    return {"url": f"/uploads/{name}"}
 
-# -------------------------
-# PLACE OBJECT
-# -------------------------
+# ---------------- PLACE OBJECT ----------------
 @app.post("/place")
 def place_object(data: PlaceObject):
     obj_id = str(uuid.uuid4())
     ts = int(time.time())
 
-    cursor.execute("""
+    cur = get_cursor()
+    cur.execute("""
         INSERT INTO objects VALUES (?, ?, ?, ?, ?, ?, ?)
     """, (
         obj_id,
@@ -114,13 +104,12 @@ def place_object(data: PlaceObject):
         "created_at": ts
     }
 
-# -------------------------
-# GET OBJECTS
-# -------------------------
+# ---------------- GET OBJECTS ----------------
 @app.get("/objects")
 def get_objects():
-    cursor.execute("SELECT * FROM objects")
-    rows = cursor.fetchall()
+    cur = get_cursor()
+    cur.execute("SELECT * FROM objects")
+    rows = cur.fetchall()
 
     return [
         {
@@ -135,21 +124,19 @@ def get_objects():
         for r in rows
     ]
 
-# -------------------------
-# DELETE OBJECT (OWNER ONLY)
-# -------------------------
+# ---------------- DELETE OBJECT ----------------
 @app.delete("/delete/{obj_id}")
 def delete_object(obj_id: str, owner: str):
-    cursor.execute("SELECT owner FROM objects WHERE id=?", (obj_id,))
-    row = cursor.fetchone()
+    cur = get_cursor()
+    cur.execute("SELECT owner FROM objects WHERE id=?", (obj_id,))
+    row = cur.fetchone()
 
     if not row:
         raise HTTPException(status_code=404, detail="Object not found")
-
     if row[0] != owner:
         raise HTTPException(status_code=403, detail="Not owner")
 
-    cursor.execute("DELETE FROM objects WHERE id=?", (obj_id,))
+    cur.execute("DELETE FROM objects WHERE id=?", (obj_id,))
     conn.commit()
 
     return {"status": "deleted"}
