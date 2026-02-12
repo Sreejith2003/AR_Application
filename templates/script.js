@@ -52,7 +52,9 @@ function initMap(lat, lon) {
     if (PLACE_MODE === "cube") {
       placeObject(PENDING_LAT, PENDING_LON, "cube", null);
       resetPlacement();
-    } else if (PLACE_MODE === "image") {
+    }
+
+    if (PLACE_MODE === "media") {
       imageInput.click();
     }
   });
@@ -79,12 +81,12 @@ cubeBtn.onclick = () => {
 };
 
 imageBtn.onclick = () => {
-  PLACE_MODE = "image";
-  alert("Tap on the map to place the image");
+  PLACE_MODE = "media";
+  alert("Tap on the map to place image or video");
 };
 
 // ================================
-// IMAGE UPLOAD
+// IMAGE / VIDEO UPLOAD (AUTO-DETECT)
 // ================================
 imageInput.addEventListener("change", async e => {
   const file = e.target.files[0];
@@ -96,7 +98,18 @@ imageInput.addEventListener("change", async e => {
   const res = await fetch("/upload", { method: "POST", body: fd });
   const data = await res.json();
 
-  placeObject(PENDING_LAT, PENDING_LON, "image", data.url);
+  let objectType;
+
+  if (file.type.startsWith("image")) {
+    objectType = "image";
+  } else if (file.type.startsWith("video")) {
+    objectType = "video";
+  } else {
+    alert("Unsupported file type");
+    return;
+  }
+
+  placeObject(PENDING_LAT, PENDING_LON, objectType, data.url);
   resetPlacement();
 });
 
@@ -121,14 +134,14 @@ function placeObject(lat, lon, type, asset) {
 }
 
 // ================================
-// RENDER OBJECT (FIXED IN WORLD)
+// RENDER OBJECT
 // ================================
 function renderObject(obj) {
   placedObjects.push(obj);
 
   let el;
 
-  // ✅ REAL 3D CUBE
+  // ---------------- 3D CUBE ----------------
   if (obj.type === "cube") {
     el = document.createElement("a-box");
 
@@ -145,7 +158,7 @@ function renderObject(obj) {
     el.setAttribute("shadow", "cast:true; receive:true");
   }
 
-  // ✅ IMAGE BILLBOARD (FACES CAMERA)
+  // ---------------- IMAGE ----------------
   else if (obj.type === "image" && obj.asset) {
     el = document.createElement("a-plane");
 
@@ -154,11 +167,28 @@ function renderObject(obj) {
     el.setAttribute("height", "4.5");
     el.setAttribute("look-at", "[gps-camera]");
     el.setAttribute("material", "side:double; shader:flat");
-  } else return;
+  }
+
+  // ---------------- VIDEO ----------------
+  else if (obj.type === "video" && obj.asset) {
+    el = document.createElement("a-video");
+
+    el.setAttribute("src", obj.asset);
+    el.setAttribute("width", "8");
+    el.setAttribute("height", "4.5");
+    el.setAttribute("look-at", "[gps-camera]");
+    el.setAttribute("material", "side:double");
+
+    el.setAttribute("autoplay", "true");
+    el.setAttribute("loop", "true");
+    el.setAttribute("muted", "true"); // required for mobile autoplay
+  }
+
+  else return;
 
   el.dataset.id = obj.id;
 
-  // 🔒 GPS ANCHOR (ONE-TIME)
+  // GPS anchor
   el.setAttribute(
     "gps-entity-place",
     `latitude:${obj.latitude}; longitude:${obj.longitude}`
@@ -166,23 +196,23 @@ function renderObject(obj) {
 
   scene.appendChild(el);
 
-  // 🔒 FREEZE POSITION (THIS MAKES IT FIXED)
+  // Freeze world position
   el.addEventListener(
     "gps-entity-place-update-position",
     () => {
       const fixedPos = el.object3D.position.clone();
-
-      el.removeAttribute("gps-entity-place"); // ❗ IMPORTANT
+      el.removeAttribute("gps-entity-place");
       el.object3D.position.copy(fixedPos);
 
-      // lift slightly for visibility
-      el.object3D.position.y = obj.type === "cube" ? 0.75 : 1.6;
+      el.object3D.position.y =
+        obj.type === "cube" ? 0.75 : 1.6;
     },
     { once: true }
   );
 
-  // MAP MARKER
+  // Map marker
   const marker = L.marker([obj.latitude, obj.longitude]).addTo(map);
+
   if (obj.owner === OWNER_ID) {
     marker.bindPopup(
       `<button onclick="deleteObj('${obj.id}')">🗑 Delete</button>`
@@ -191,7 +221,7 @@ function renderObject(obj) {
 }
 
 // ================================
-// DELETE OBJECT
+// DELETE
 // ================================
 window.deleteObj = id => {
   fetch(`/delete/${id}?owner=${OWNER_ID}`, { method: "DELETE" })
@@ -214,7 +244,7 @@ function loadObjects() {
 }
 
 // ================================
-// RESET PLACEMENT
+// RESET
 // ================================
 function resetPlacement() {
   PLACE_MODE = null;
@@ -223,7 +253,7 @@ function resetPlacement() {
 }
 
 // ================================
-// COMPASS / ARROW LOGIC
+// COMPASS LOGIC
 // ================================
 window.addEventListener("deviceorientationabsolute", e => {
   if (e.alpha !== null) {
@@ -247,8 +277,6 @@ function updateArrow() {
   if (!map || placedObjects.length === 0 || !mapArrow) return;
 
   const center = map.getCenter();
-
-  // nearest object (simple version)
   const target = placedObjects[0];
 
   const bearing = getBearing(

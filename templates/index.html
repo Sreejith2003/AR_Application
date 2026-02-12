@@ -1,36 +1,44 @@
 <!DOCTYPE html>
 <html>
 <head>
+
   <meta
-  name="viewport"
-  content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"
-/>
+    name="viewport"
+    content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"
+  />
 
   <meta charset="UTF-8" />
   <title>Shared AR</title>
 
+  <!-- A-Frame + AR.js -->
   <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
   <script src="https://ar-js-org.github.io/AR.js/aframe/build/aframe-ar.js"></script>
 
+  <!-- Leaflet -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <!-- Look-at component -->
+  <script src="https://unpkg.com/aframe-look-at-component@0.8.0/dist/aframe-look-at-component.min.js"></script>
 
   <link rel="stylesheet" href="/templates/style.css" />
 </head>
 
 <body>
 
-
+<!-- Resize handle -->
 <div id="map-resizer"></div>
 
+<!-- AR Scene -->
 <a-scene
   embedded
   shadow="type: pcfsoft"
   arjs="gpsMinDistance:25; gpsTimeInterval:10000;"
-  vr-mode-ui="enabled:false">
-
+  vr-mode-ui="enabled:false"
+>
 
   <a-camera gps-camera rotation-reader shadow="receive: true"></a-camera>
+
   <a-light type="ambient" intensity="0.5"></a-light>
 
   <a-light
@@ -40,24 +48,28 @@
     castShadow="true">
   </a-light>
 
-
 </a-scene>
 
-<div id = "camera-frame"></div>
+<!-- Camera frame overlay -->
+<div id="camera-frame"></div>
 <div id="reticle">+</div>
 
+<!-- Map -->
 <div id="map"></div>
 
+<!-- Compass Arrow -->
+<div id="map-arrow">▲</div>
+
+<!-- Controls -->
 <div id="controls">
+
   <button id="cubeBtn" class="action-btn cube">
     🧊 Place Cube
   </button>
 
   <button id="imageBtn" class="action-btn image">
-    🖼 Place Image
+    🖼 Place Image / Video
   </button>
-
-  <button id="mapToggle">🗺 Map</button>
 
 </div>
 
@@ -65,15 +77,15 @@
   👆 Choose an object, then tap on the map
 </div>
 
-<!-- ADD INSIDE <body> (below map) -->
-<div id="map-arrow">▲</div>
-
-
-<input type="file" id="imageInput" accept="image/*" hidden />
+<!-- File input supports BOTH image + video -->
+<input 
+  type="file" 
+  id="imageInput" 
+  accept="image/*,video/mp4" 
+  hidden 
+/>
 
 <script src="/templates/script.js"></script>
-<!-- Make planes face the camera -->
-<script src="https://unpkg.com/aframe-look-at-component@0.8.0/dist/aframe-look-at-component.min.js"></script>
 
 </body>
 </html>
